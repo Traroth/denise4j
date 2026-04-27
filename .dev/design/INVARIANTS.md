@@ -47,4 +47,130 @@ Whenever a new class is introduced:
 
 ---
 
-*(No classes implemented yet. Add a section here for each new class.)*
+---
+
+# `Stage`
+
+    stage.image != null
+    stage.image.getType() == BufferedImage.TYPE_INT_ARGB  // enforced by JML @invariant
+    stage.getWidth() > 0
+    stage.getHeight() > 0
+    stage.getPixels() != null
+    stage.getPixels().length == stage.getWidth() * stage.getHeight()
+    // backgroundColor is a valid ARGB value (any int is valid)
+
+---
+
+# `PixelSource`
+
+    pixelSource.getWidth() > 0
+    pixelSource.getHeight() > 0
+
+---
+
+# `ImageSource`
+
+    imageSource.image != null                         // image is always TYPE_INT_ARGB after construction
+    imageSource.image.getType() == TYPE_INT_ARGB      // guaranteed: converted if needed in constructor
+    imageSource.getWidth() > 0
+    imageSource.getHeight() > 0
+    imageSource.pixels != null                        // DataBufferInt array, cached at construction
+    imageSource.pixels.length == getWidth() * getHeight()
+
+---
+
+# `TileSet`
+
+    tileSet.image != null
+    tileSet.tileWidth > 0
+    tileSet.tileHeight > 0
+    tileSet.tileCount > 0
+    tileSet.tileCount == (image.getWidth() / tileWidth) * (image.getHeight() / tileHeight)
+
+---
+
+# `TileMap`
+
+    tileMap.tileSet != null                                              // enforced by JML @invariant
+    tileMap.cols > 0
+    tileMap.rows > 0
+    tileMap.edgePolicy != null
+    tileMap.getWidth() == tileMap.cols * tileMap.tileSet.tileWidth
+    tileMap.getHeight() == tileMap.rows * tileMap.tileSet.tileHeight
+    // All tile indices in the grid are >= 0 and < tileSet.tileCount
+    // isUnbounded() == (edgePolicy == WRAP)
+    // getPixel(x, y) with out-of-bounds (x, y) on CLIP/FEED throws IndexOutOfBoundsException
+    // The pipeline never calls getPixel out-of-bounds on a bounded source
+
+---
+
+# `ParamInt`
+
+    // No range constraint by default — the effect validates at render time
+
+---
+
+# `ParamDouble`
+
+    // No range constraint by default — the effect validates at render time
+
+---
+
+# `EffectPipeline`
+
+    // After build(): the pipeline structure is immutable
+    // At least one addSource() call before build()
+    // The background color is carried by Stage, not by the pipeline
+
+## Effects — `Transform` internal interface
+
+Each effect method adds a `Transform` to the current layer's chain.
+The following invariants apply to any `Transform` at render time:
+
+    // prepare() is called exactly once per render per layer, before the pixel loop
+    // srcX(x, y) and srcY(x, y) are called for every stage pixel
+    // All coordinates are double — rounding is deferred to the bilinear sampler
+
+## Effect — `scrollH`
+
+    // offset: any integer value — negative, zero, positive
+    // srcX = x + offset.get()
+    // srcY = y (unchanged)
+    // Result is always integer-valued — bilinear shortcut triggers (tx == 0.0 && ty == 0.0)
+
+## Effect — `scrollV`
+
+    // offset: any integer value
+    // srcX = x (unchanged)
+    // srcY = y + offset.get()
+    // Result is always integer-valued — bilinear shortcut triggers
+
+## Effect — `zoom`
+
+    // factor > 0 required at render time (IllegalArgumentException if factor <= 0)
+    // cx, cy: centre of zoom in stage coordinates; defaults to stageW/2, stageH/2
+    // srcX = cx + (x - cx) / factor
+    // srcY = cy + (y - cy) / factor
+    // Bilinear interpolation for non-integer srcX/srcY
+    // Edge clamping for bounded sources: x1 = min(x0 + 1, srcW - 1)
+
+## Effect — `rotate`
+
+    // angle: any double in radians (no range restriction)
+    // cx, cy: centre of rotation in stage coordinates; defaults to stageW/2, stageH/2
+    // cosA and sinA are precomputed in prepare(); not recomputed per pixel
+    // srcX = cx + (x - cx) * cos(angle) + (y - cy) * sin(angle)
+    // srcY = cy - (x - cx) * sin(angle) + (y - cy) * cos(angle)
+    // Bilinear interpolation; same edge clamping as zoom
+
+---
+
+# `FrameDropStrategy` (a venir)
+
+Enum — pas d'invariants specifiques au-dela de la non-nullite.
+
+---
+
+# `WingNotReadyException` (a venir)
+
+Exception standard — pas d'invariants specifiques.

@@ -47,6 +47,11 @@ effects and animations via direct pixel manipulation.
 - **Palette** — palette cycling, fading, remapping
 - **Compositing** — blending, masking, overlaying images
 
+### Build
+
+- **Java version:** 11
+- **Build tool:** Maven
+
 ### Package
 
 `fr.dufrenoy.imagefx`
