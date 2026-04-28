@@ -20,19 +20,26 @@ and for AI coding agents working on the project.
 ## Vue d'ensemble de l'architecture
 
 ```
-Couche effets (100% portable, aucune dependance GUI)
+fr.dufrenoy.imagefx.source  — sources de pixels (100% portable, aucune dependance GUI)
 ──────────────────────────────────────────────────────
 PixelSource          (interface)
 ImageSource          (wrapper BufferedImage -> PixelSource)
 TileSet              (spritesheet decoupe en tuiles)
 TileMap              (grille de tuiles + EdgePolicy)
+
+fr.dufrenoy.imagefx.staging  — pipeline et buffers
+──────────────────────────────────────────────────────
 ParamInt / ParamDouble (parametres mutables pour le pipeline)
 EffectPipeline       (chainage d'effets, stateless, render dans un Stage)
 Stage                (BufferedImage wrapper + acces pixels)
 
-Couche animation (a venir)
+fr.dufrenoy.imagefx.orchestration  — boucle d'animation
 ──────────────────────────────────────────────────────
-Orchestrator         (boucle de frames, double-buffering, timing)
+FrameDropPolicy      (enum: EXCEPTION, WAIT, REPEAT_LAST, WARN_AND_REPEAT, SKIP)
+FrameDropException   (RuntimeException pour FrameDropPolicy.EXCEPTION)
+FrameCallback        (@FunctionalInterface: onFrame(frameIndex, deltaMs))
+StagePool            (pool thread-safe de N stages, double/triple buffering)
+Orchestrator         (boucle de frames, timing, pilotage du pipeline)
 ```
 
 ---
@@ -287,24 +294,119 @@ Pour des angles comme π, `sin(π)` ≈ 1.2e-16 au lieu de 0. Les tests utilisan
 
 ---
 
-## Orchestrator — `fr.dufrenoy.imagefx.Orchestrator` (a venir)
+## `FrameDropPolicy` — `fr.dufrenoy.imagefx.orchestration.FrameDropPolicy`
 
-Niveau animation. Gere la boucle de frames, le double-buffering entre deux Stages, le timing, le pilotage des Param.
+Enum definissant le comportement de `StagePool.getFrontBuffer()` quand aucune frame n'est prete.
 
-**Prevu pour une phase ulterieure.** Le design actuel (pipeline stateless + Param mutables) est concu pour s'y integrer naturellement.
+| Valeur | Comportement |
+|--------|-------------|
+| `EXCEPTION` | Lance `FrameDropException` |
+| `WAIT` | Bloque jusqu'a ce qu'une frame soit presentee |
+| `REPEAT_LAST` | Retourne le stage affiche couramment, sans log |
+| `WARN_AND_REPEAT` | Log sur `System.err`, puis retourne le stage courant |
+| `SKIP` | Retourne `null` — l'appelant ignore ce tick |
+
+**Design choices:**
+- Enum plutot qu'interface — les strategies sont closes ; aucun use case pour une strategie personnalisee
+- `WAIT` utilise `BlockingQueue.take()` — pas de spin-wait, pas de sleep
+- `SKIP` est le seul cas ou `getFrontBuffer()` retourne `null` — documente au contrat JML
+
+**Alternatives rejetees:**
+- Interface `FrameDropStrategy` — extensibilite inutile, complexifie le contrat de `StagePool`
 
 ---
 
-## FrameDropStrategy (a venir)
+## `FrameDropException` — `fr.dufrenoy.imagefx.orchestration.FrameDropException`
 
-Strategie appliquee quand le buffer suivant n'est pas pret au moment de la presentation.
-
-**Prevu pour une phase ulterieure**, avec l'Orchestrator.
+`RuntimeException` lancee par `StagePool.getFrontBuffer()` quand la politique est `EXCEPTION` et qu'aucune frame n'est prete. Pas d'etat additionnel.
 
 ---
 
-## WingNotReadyException (a venir)
+## `FrameCallback` — `fr.dufrenoy.imagefx.orchestration.FrameCallback`
 
-Exception levee quand `FrameDropStrategy.THROW_EXCEPTION` est active et que le buffer suivant n'est pas pret.
+`@FunctionalInterface` appele par l'`Orchestrator` une fois par frame, avant le render, depuis le thread de rendu.
 
-**Prevu pour une phase ulterieure**, avec l'Orchestrator.
+```java
+void onFrame(long frameIndex, long deltaMs);
+```
+
+**Design choices:**
+- Appele depuis le thread de rendu — les mutations de `ParamInt`/`ParamDouble` n'ont pas besoin de synchronisation tant qu'elles restent dans ce callback
+- `frameIndex` : compteur monotone croissant depuis 0
+- `deltaMs` : duree en ms depuis la frame precedente ; vaut `0` pour la frame 0 (aucune frame precedente)
+- `@FunctionalInterface` — permet les lambdas ; le cas nominal est une lambda courte
+
+**Alternatives rejetees:**
+- Callback appele depuis le thread display — necessite une synchronisation des Param
+- Passer `deltaMs` en `double` — precision inutile pour des durees de frames en millisecondes
+
+---
+
+## `StagePool` — `fr.dufrenoy.imagefx.orchestration.StagePool`
+
+Pool thread-safe de N stages pour le double ou triple buffering (N ≥ 2).
+
+**Model producer-consumer borne :**
+
+```
+freeQueue  [N-1 slots]   ←── thread display (getFrontBuffer libere l'ancien displayStage)
+                         ──→ thread rendu   (acquireBackBuffer prend depuis freeQueue)
+
+readyQueue [N-1 slots]   ←── thread rendu   (present enqueue)
+                         ──→ thread display (getFrontBuffer dequeue)
+
+displayStage             :   stage couramment visible (1 slot implicite)
+```
+
+A tout moment : `freeQueue.size() + readyQueue.size() + 1 (displayStage) == N`.
+
+**Design choices:**
+- `acquireBackBuffer()` bloque via `BlockingQueue.take()` quand tous les stages sont occupes — le thread de rendu attend naturellement, sans spin-wait
+- Avec N=2 : le thread de rendu a 0 frame d'avance (doit attendre chaque tick display)
+- Avec N=3 : le thread de rendu peut avoir 1 frame d'avance (triple buffering classique)
+- Les drops de frames ne surviennent qu'en display (`getFrontBuffer`) — jamais en production
+- `FrameDropPolicy` est appliquee uniquement cote display
+- `present()` utilise `BlockingQueue.add()` (non bloquant) — la file est dimensionnee pour ne jamais deborder si le protocol d'utilisation est respecte
+
+**Alternatives rejetees:**
+- Ring buffer circulaire avec ecrasement — le thread de rendu ecraserait des frames non encore affichees ; comportement impredictible pour une bibliotheque
+- `Semaphore` direct — moins lisible, memes garanties
+- `N=1` interdit — impossible d'avoir un displayStage et un backBuffer simultanement
+
+---
+
+## `Orchestrator` — `fr.dufrenoy.imagefx.orchestration.Orchestrator`
+
+Boucle d'animation haut niveau. Pilote un `EffectPipeline` a un taux de frames cible.
+
+**Fluent builder API :**
+```java
+Orchestrator orchestrator = new Orchestrator()
+    .pipeline(pipeline)
+    .stagePool(pool)
+    .targetFps(60)
+    .onFrame((frameIndex, deltaMs) -> { scrollOffset.add(2); })
+    .build();
+
+orchestrator.start();
+// thread display :
+Stage front = orchestrator.getFrontBuffer();
+orchestrator.stop();
+```
+
+**Design choices:**
+- Fluent builder avec `build()` qui verrouille la configuration — toute reconfiguration post-build lance `IllegalStateException`
+- Thread de rendu daemon — ne bloque pas la JVM a l'arret
+- `renderLoop()` : `acquireBackBuffer` → `callback.onFrame` → `pipeline.render` → `present` → sleep
+- `deltaMs` vaut `0` pour la frame 0 via le sentinel `lastFrameStart = -1L` — aucun calcul arbitraire avant la premiere frame
+- `stop()` interrompt le thread de rendu (`interrupt()`) puis attend sa terminaison (`join()`) — arret propre garanti
+- `getFrontBuffer()` delegue a `StagePool.getFrontBuffer()` — la politique de drop est dans le pool
+
+**Thread safety:**
+- `running` est `volatile` — visible immediatement entre thread appelant et thread de rendu
+- `targetFps` et les autres champs de configuration sont ecrits avant `Thread.start()` — la garantie *happens-before* de `Thread.start()` assure leur visibilite dans le thread de rendu
+- `built` est lu uniquement depuis le thread appelant — aucune visibilite multi-thread requise
+
+**Alternatives rejetees:**
+- `ScheduledExecutorService` pour le timing — granularite insuffisante pour des cibles > 30 fps ; `Thread.sleep` avec correction de derive est plus precis
+- Callback appele depuis le thread display — necessite une synchronisation des Param entre les deux threads

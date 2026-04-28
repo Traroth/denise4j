@@ -133,27 +133,57 @@ of each session.
 
 ---
 
-## Orchestrator (a venir — niveau animation)
+## FrameDropPolicy
 
-- [ ] Design discussion (step 1)
-- [ ] Stub class + JML specifications (step 2)
-- [ ] Implementation (boucle de frames, double-buffering, timing)
-- [ ] BlackBoxTest
-- [ ] WhiteBoxTest
+- [x] Design discussion (step 1)
+- [x] Stub enum + JML specifications (step 2)
+- [x] Implementation
+- [x] BlackBoxTest (via StagePoolBlackBoxTest)
+- [x] Static analysis (step 9)
 
-## FrameDropStrategy (a venir)
+## FrameDropException
 
-- [ ] Design discussion (step 1)
-- [ ] Stub enum + JML specifications (step 2)
-- [ ] Implementation
-- [ ] BlackBoxTest
+- [x] Design discussion (step 1)
+- [x] Stub class + JML specifications (step 2)
+- [x] Implementation
+- [x] BlackBoxTest (via StagePoolBlackBoxTest)
+- [x] Static analysis (step 9)
 
-## WingNotReadyException (a venir)
+## FrameCallback
 
-- [ ] Design discussion (step 1)
-- [ ] Stub class + JML specifications (step 2)
-- [ ] Implementation
-- [ ] BlackBoxTest
+- [x] Design discussion (step 1)
+- [x] Stub interface + JML specifications (step 2)
+- [x] Implementation
+- [x] BlackBoxTest (via OrchestratorBlackBoxTest)
+- [x] Static analysis (step 9)
+
+## StagePool
+
+- [x] Design discussion (step 1)
+- [x] Stub class + JML specifications (step 2)
+- [x] BlackBoxTest
+- [x] Implementation
+- [x] WhiteBoxTest (conservation N cycles, WAIT interrupt, displayStage freed)
+- [x] Static analysis (step 9)
+- [x] JML conformance check (step 10) — aucune violation
+- [x] JML completeness check (step 11) — @ensures ajoute sur present()
+- [x] Test coverage review (step 12) — 96% instructions, 95% branches ; residuel acceptable
+- [x] Update ARCHITECTURE.md + INVARIANTS.md (step 4)
+- [x] Update BACKLOG.md (step 5)
+
+## Orchestrator
+
+- [x] Design discussion (step 1)
+- [x] Stub class + JML specifications (step 2)
+- [x] BlackBoxTest
+- [x] Implementation (boucle de frames, double-buffering, timing)
+- [x] WhiteBoxTest (thread name, stop() sur render bloque en acquire)
+- [x] Static analysis (step 9)
+- [x] JML conformance check (step 10) — aucune violation
+- [x] JML completeness check (step 11) — @ensures ajoutes sur setters et start()
+- [x] Test coverage review (step 12) — 99% instructions, 96% branches ; residuel acceptable
+- [x] Update ARCHITECTURE.md + INVARIANTS.md (step 4)
+- [x] Update BACKLOG.md (step 5)
 
 ---
 

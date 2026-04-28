@@ -20,9 +20,13 @@
  * License along with this library; if not, see
  * <https://www.gnu.org/licenses/>.
  */
-package fr.dufrenoy.imagefx;
+package fr.dufrenoy.imagefx.staging;
 
 import java.awt.image.BufferedImage;
+
+import fr.dufrenoy.imagefx.source.ImageSource;
+import fr.dufrenoy.imagefx.source.TileMap;
+import fr.dufrenoy.imagefx.source.TileSet;
 
 import org.junit.jupiter.api.Test;
 

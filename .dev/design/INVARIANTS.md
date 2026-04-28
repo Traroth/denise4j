@@ -165,12 +165,41 @@ The following invariants apply to any `Transform` at render time:
 
 ---
 
-# `FrameDropStrategy` (a venir)
+# `FrameDropPolicy`
 
 Enum — pas d'invariants specifiques au-dela de la non-nullite.
 
 ---
 
-# `WingNotReadyException` (a venir)
+# `FrameDropException`
 
-Exception standard — pas d'invariants specifiques.
+`RuntimeException` standard — pas d'invariants specifiques.
+
+---
+
+# `FrameCallback`
+
+`@FunctionalInterface` — pas d'invariants d'etat (interface sans champs).
+
+---
+
+# `StagePool`
+
+    stagePool.getWidth() > 0
+    stagePool.getHeight() > 0
+    stagePool.getBufferCount() >= 2
+    stagePool.getFrameDropPolicy() != null
+    // Conservation : freeQueue.size() + readyQueue.size() + 1 (displayStage) == bufferCount
+    // displayStage != null  (initialise a la construction avec un Stage vide)
+    // Tous les stages ont les memes dimensions (width x height)
+
+---
+
+# `Orchestrator`
+
+    // running ==> built
+    // built ==> pipeline != null
+    // built ==> stagePool != null
+    // built ==> targetFps > 0
+    // built ==> callback != null
+    // deltaMs == 0 pour frameIndex == 0 (sentinel lastFrameStart = -1L)

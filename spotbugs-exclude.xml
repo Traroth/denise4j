@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+
+    <!-- CT_CONSTRUCTOR_THROW: validation in constructors is intentional.
+         Classes are non-final by design to allow extension by library users. -->
+    <Match>
+        <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+        <Or>
+            <Class name="fr.dufrenoy.imagefx.staging.Stage"/>
+            <Class name="fr.dufrenoy.imagefx.source.ImageSource"/>
+            <Class name="fr.dufrenoy.imagefx.source.TileSet"/>
+            <Class name="fr.dufrenoy.imagefx.source.TileMap"/>
+            <Class name="fr.dufrenoy.imagefx.orchestration.StagePool"/>
+        </Or>
+    </Match>
+
+    <!-- AT_STALE_THREAD_WRITE_OF_PRIMITIVE in Orchestrator:
+         - built: only read from the same thread that writes it (the caller thread).
+           The render thread never reads built. No cross-thread visibility issue.
+         - targetFps: written before Thread.start(); Java's memory model guarantees
+           that all writes before Thread.start() are visible to the started thread
+           (happens-before). SpotBugs does not model this guarantee. -->
+    <Match>
+        <Bug pattern="AT_STALE_THREAD_WRITE_OF_PRIMITIVE"/>
+        <Class name="fr.dufrenoy.imagefx.orchestration.Orchestrator"/>
+    </Match>
+
+    <!-- EI_EXPOSE_REP / EI_EXPOSE_REP2: intentional by design.
+         Stage exposes its BufferedImage and pixel array as part of its public API.
+         ImageSource and TileSet store the caller-provided BufferedImage directly
+         for performance; defensive copies would defeat the purpose. -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP"/>
+        <Or>
+            <Class name="fr.dufrenoy.imagefx.staging.Stage"/>
+        </Or>
+    </Match>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+        <Or>
+            <Class name="fr.dufrenoy.imagefx.source.ImageSource"/>
+            <Class name="fr.dufrenoy.imagefx.source.TileSet"/>
+        </Or>
+    </Match>
+
+</FindBugsFilter>

@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session startup
+
+At the beginning of every session, read the following files **before** writing any code or discussing implementation:
+
+| File | Purpose |
+|------|---------|
+| `.dev/WORKFLOW.md` | Mandatory step-by-step development workflow (design-first, stubs + JML, TDD, static analysis) |
+| `.dev/standards/JAVA_STANDARDS.md` | Coding standards: JML placement, catch variable naming, imports, Javadoc |
+| `.dev/design/ARCHITECTURE.md` | Current architecture decisions and rationale |
+| `.dev/design/INVARIANTS.md` | Class invariants expressed in JML |
+| `.dev/BACKLOG.md` | Backlog — tasks in progress, pending, and done |
+| `.dev/glossary/thesaurus.yaml` | Canonical vocabulary — terms to use, synonyms, and rejected terms |
+
+The `.dev/skills/` folder contains skills that can be invoked at specific workflow steps.
+The thesaurus defines the **ubiquitous language** of the project. Always use canonical terms in code, Javadoc, and documentation.
+
 ## Project Overview
 
 `denise4j` est une bibliotheque graphique Java inspiree des effets demoscene des annees 80/90. Elle exploite les classes d'images Java (`BufferedImage`, etc.) pour produire des effets et animations graphiques.

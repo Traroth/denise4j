@@ -20,7 +20,7 @@
  * License along with this library; if not, see
  * <https://www.gnu.org/licenses/>.
  */
-package fr.dufrenoy.imagefx;
+package fr.dufrenoy.imagefx.source;
 
 /**
  * A readable source of pixels used by the effect pipeline.

@@ -1,0 +1,873 @@
+# Thesaurus lexicographique et documentaire — denise4j
+#
+# Objectif : garantir un vocabulaire stable et cohérent dans toute la
+# documentation, le code, les commentaires et les échanges avec les outils IA.
+# Un vocabulaire cohérent améliore la qualité de la recherche sémantique (RAG)
+# et réduit les ambiguïtés lors de la génération de code.
+#
+# Structure de chaque entrée :
+#   canonical  : terme officiel, celui utilisé dans le code Java
+#   synonyms   : variantes acceptables dans la documentation
+#   rejected   : termes à ne PAS utiliser, avec la raison
+#   broader    : concept plus général
+#   narrower   : concepts plus spécifiques
+#   related    : termes associés sans relation hiérarchique
+#   notes      : précisions sémantiques importantes
+#
+# Les termes marqués [FR] sont des équivalents français acceptables dans les
+# commentaires et la documentation rédigée en français.
+
+---
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COUCHE RENDU — objets centraux
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- canonical: "Stage"
+  synonyms:
+    - "pixel buffer"
+    - "render target"
+    - "frame buffer"          # acceptable en contexte graphique général
+  rejected:
+    - term: "Wing"
+      reason: "Nom historique abandonné lors du redesign 2026-04-26"
+    - term: "canvas"
+      reason: "Désigne java.awt.Canvas — composant GUI, couplage toolkit interdit"
+    - term: "screen"
+      reason: "Implique un affichage — Stage est toolkit-agnostic"
+  broader:
+    - "pixel buffer"
+    - "image wrapper"
+  narrower: []
+  related:
+    - "BufferedImage"
+    - "backgroundColor"
+    - "StagePool"
+    - "EffectPipeline.render"
+  notes: >
+    Stage encapsule un BufferedImage TYPE_INT_ARGB. Il porte la backgroundColor.
+    Il n'a aucune dépendance sur Swing, JavaFX ou SWT. L'utilisateur l'affiche
+    via le toolkit de son choix.
+
+- canonical: "PixelSource"
+  synonyms:
+    - "pixel source"
+    - "source de pixels"      # [FR]
+    - "image source"          # générique uniquement — à éviter si ImageSource est visé
+  rejected:
+    - term: "layer source"
+      reason: "Layer désigne le concept dans EffectPipeline, pas la source elle-même"
+  broader:
+    - "interface"
+  narrower:
+    - "ImageSource"
+    - "TileMap"
+  related:
+    - "isUnbounded"
+    - "bounded source"
+    - "unbounded source"
+    - "EffectPipeline"
+  notes: >
+    Interface minimale : getPixel(x, y), getWidth(), getHeight(), isUnbounded().
+    ImageSource et TileMap sont les deux implémentations actuelles.
+
+- canonical: "ImageSource"
+  synonyms:
+    - "image wrapper"
+    - "BufferedImage wrapper"
+  rejected:
+    - term: "ImagePixelSource"
+      reason: "Nom trop verbeux, non utilisé dans le code"
+  broader:
+    - "PixelSource"
+  narrower: []
+  related:
+    - "BufferedImage"
+    - "DataBufferInt"
+    - "pixel array"
+  notes: >
+    Convertit tout BufferedImage en TYPE_INT_ARGB à la construction.
+    Accès O(1) via DataBufferInt direct array.
+
+- canonical: "EffectPipeline"
+  synonyms:
+    - "pipeline"
+    - "effect pipeline"
+    - "effect chain"
+    - "chaîne d'effets"       # [FR]
+    - "rendering pipeline"
+  rejected:
+    - term: "renderer"
+      reason: "Renderer suggère un objet qui gère l'affichage — EffectPipeline produit un Stage, pas un affichage"
+    - term: "filter chain"
+      reason: "Filter implique une transformation in-place — EffectPipeline lit depuis une source vers un Stage"
+  broader:
+    - "pipeline"
+  narrower:
+    - "layer"
+    - "Transform"
+  related:
+    - "Stage"
+    - "PixelSource"
+    - "ParamInt"
+    - "ParamDouble"
+    - "render"
+    - "build"
+  notes: >
+    Construit une fois, réutilisé chaque frame. Structure fixe après build().
+    Stateless : seuls les Param changent entre frames.
+
+- canonical: "layer"
+  synonyms:
+    - "pipeline layer"
+    - "source layer"
+    - "couche"                # [FR]
+  rejected:
+    - term: "channel"
+      reason: "Channel désigne une composante ARGB, pas un layer"
+    - term: "track"
+      reason: "Terme audio/vidéo, non utilisé dans le projet"
+  broader:
+    - "EffectPipeline"
+  narrower: []
+  related:
+    - "addSource"
+    - "fuseLayer"
+    - "transparentColor"
+    - "Transform"
+  notes: >
+    Un layer est ouvert par addSource() et reçoit une chaîne de transforms.
+    fuseLayer() fusionne les layers accumulés en un seul.
+
+- canonical: "render"
+  synonyms:
+    - "rendering"
+    - "rendu"                 # [FR]
+    - "frame rendering"
+  rejected:
+    - term: "draw"
+      reason: "draw() est une méthode Graphics2D — EffectPipeline.render() opère sur des tableaux int[], pas via Graphics2D"
+    - term: "paint"
+      reason: "paint() est une méthode Swing — couplage toolkit interdit"
+    - term: "display"
+      reason: "display implique l'affichage à l'écran — render produit un Stage, pas un affichage"
+  broader: []
+  narrower: []
+  related:
+    - "EffectPipeline"
+    - "Stage"
+    - "frame"
+  notes: >
+    EffectPipeline.render(Stage) : remplit le Stage avec backgroundColor
+    puis composite les layers. Ne produit pas d'affichage.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMPOSITING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- canonical: "always overwrite model"
+  synonyms:
+    - "overwrite compositing"
+    - "modèle d'écrasement systématique"  # [FR]
+  rejected:
+    - term: "alpha blending"
+      reason: "Alpha blending mélange les couches — always overwrite écrase sans mélange (sauf transparentColor)"
+    - term: "painter's algorithm"
+      reason: "Painter's algorithm est correct dans le principe mais ne capture pas la sémantique transparentColor"
+  broader:
+    - "compositing"
+  narrower: []
+  related:
+    - "transparentColor"
+    - "backgroundColor"
+    - "layer"
+  notes: >
+    Pour chaque pixel (x,y) du Stage : valeur initiale = backgroundColor.
+    Chaque layer écrase si la source couvre la position ET le pixel
+    ne correspond pas à transparentColor.
+
+- canonical: "transparentColor"
+  synonyms:
+    - "color key"
+    - "chroma key"            # acceptable en contexte graphique général
+    - "transparent color"
+    - "couleur transparente"  # [FR]
+  rejected:
+    - term: "alpha"
+      reason: "Alpha est le canal de transparence ARGB — transparentColor est un color key discret, sans mélange"
+    - term: "mask"
+      reason: "Mask implique un canal binaire séparé — transparentColor est une valeur de pixel à exclure"
+    - term: "clipColor"
+      reason: "Nom historique abandonné lors du redesign"
+  broader:
+    - "compositing"
+  narrower: []
+  related:
+    - "layer"
+    - "always overwrite model"
+  notes: >
+    Défini par layer via .transparentColor(int argb). Si le pixel source
+    correspond à cette valeur, il n'est pas écrit dans le Stage.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SYSTÈME DE TUILES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- canonical: "TileSet"
+  synonyms:
+    - "tile set"
+    - "spritesheet"
+    - "tileset"
+    - "planche de tuiles"     # [FR]
+  rejected:
+    - term: "texture atlas"
+      reason: "Texture atlas est un terme GPU/OpenGL — TileSet est purement Java2D"
+    - term: "sprite sheet"
+      reason: "Sprite sheet suggère des sprites animés — TileSet est une grille de tuiles fixes"
+  broader:
+    - "PixelSource"
+  narrower: []
+  related:
+    - "TileMap"
+    - "tile"
+    - "tile index"
+  notes: >
+    Grille de tuiles de taille fixe découpée dans un BufferedImage.
+    Indexation ligne par ligne (sens de lecture), index 0 = haut-gauche.
+
+- canonical: "TileMap"
+  synonyms:
+    - "tile map"
+    - "tilemap"
+    - "grille de tuiles"      # [FR]
+    - "map"                   # acceptable dans un contexte où TileMap est établi
+  rejected:
+    - term: "tileset"
+      reason: "TileSet et TileMap sont deux classes distinctes — ne pas confondre"
+    - term: "level"
+      reason: "Level implique une sémantique de jeu — TileMap est une abstraction graphique"
+  broader:
+    - "PixelSource"
+  narrower: []
+  related:
+    - "TileSet"
+    - "EdgePolicy"
+    - "setTiles"
+    - "tile index"
+  notes: >
+    Grille 2D d'indices de tuiles référençant un TileSet. Implémente PixelSource.
+    Le développeur pilote explicitement le chargement via setTiles().
+
+- canonical: "EdgePolicy"
+  synonyms:
+    - "edge policy"
+    - "border policy"
+    - "politique de bord"     # [FR]
+    - "boundary policy"
+  rejected:
+    - term: "wrap mode"
+      reason: "Wrap mode ne désigne qu'une des trois politiques — EdgePolicy les englobe toutes"
+    - term: "overflow policy"
+      reason: "Overflow a une connotation arithmétique — le terme bord/edge est plus précis"
+  broader: []
+  narrower:
+    - "WRAP"
+    - "CLIP"
+    - "FEED"
+  related:
+    - "TileMap"
+    - "isUnbounded"
+    - "bounded source"
+    - "unbounded source"
+
+- canonical: "WRAP"
+  synonyms:
+    - "wrap"
+    - "tiling"
+    - "wrapping"
+    - "bouclage"              # [FR]
+    - "repeat"
+  rejected:
+    - term: "loop"
+      reason: "Loop désigne une boucle de code, pas une politique de bord"
+    - term: "mirror"
+      reason: "Mirror est un mode de répétition différent (réflexion) — non implémenté"
+  broader:
+    - "EdgePolicy"
+  narrower: []
+  related:
+    - "isUnbounded"
+    - "unbounded source"
+    - "floorMod"
+  notes: >
+    isUnbounded() == true. Le pipeline peut appeler getPixel() avec des
+    coordonnées quelconques — la TileMap les ramène modulo ses dimensions.
+
+- canonical: "bounded source"
+  synonyms:
+    - "bounded PixelSource"
+    - "source bornée"         # [FR]
+    - "finite source"
+  rejected:
+    - term: "clipped source"
+      reason: "Clipped désigne le comportement CLIP, pas la propriété bornée en général"
+  broader:
+    - "PixelSource"
+  narrower: []
+  related:
+    - "CLIP"
+    - "FEED"
+    - "isUnbounded"
+    - "edge clamping"
+  notes: >
+    isUnbounded() == false. Le pipeline bounds-checke avant d'appeler getPixel().
+    Positions hors bornes : backgroundColor du Stage reste visible.
+
+- canonical: "unbounded source"
+  synonyms:
+    - "unbounded PixelSource"
+    - "source non bornée"     # [FR]
+    - "infinite source"
+    - "wrapping source"
+  rejected:
+    - term: "infinite map"
+      reason: "Infinite implique une génération infinie — ici c'est du wrapping périodique"
+  broader:
+    - "PixelSource"
+  narrower: []
+  related:
+    - "WRAP"
+    - "isUnbounded"
+    - "TileMap"
+  notes: >
+    isUnbounded() == true. Le pipeline passe des coordonnées quelconques
+    sans bounds-check. Seul WRAP est unbounded actuellement.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PARAMÈTRES MUTABLES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- canonical: "ParamInt"
+  synonyms:
+    - "int parameter"
+    - "integer parameter"
+    - "paramètre entier"      # [FR]
+  rejected:
+    - term: "Param"
+      reason: "Param seul est ambigu — toujours préciser ParamInt ou ParamDouble"
+    - term: "IntParam"
+      reason: "Ordre inversé — convention du projet : type en suffixe (ParamInt)"
+  broader:
+    - "mutable parameter"
+  narrower: []
+  related:
+    - "ParamDouble"
+    - "scrollH"
+    - "scrollV"
+  notes: >
+    Valeur entière mutable. Utilisé pour les offsets de scroll, les indices.
+    add() wraps on overflow (comportement int Java standard).
+
+- canonical: "ParamDouble"
+  synonyms:
+    - "double parameter"
+    - "floating-point parameter"
+    - "paramètre flottant"    # [FR]
+  rejected:
+    - term: "Param"
+      reason: "Ambigu — toujours préciser ParamInt ou ParamDouble"
+    - term: "DoubleParam"
+      reason: "Ordre inversé — convention du projet : type en suffixe"
+    - term: "ParamFloat"
+      reason: "Float non utilisé dans le projet — toujours double"
+  broader:
+    - "mutable parameter"
+  narrower: []
+  related:
+    - "ParamInt"
+    - "zoom"
+    - "rotate"
+  notes: >
+    Valeur double mutable. Utilisé pour le facteur de zoom, l'angle de rotation,
+    les centres. Accepte NaN et Infinity (validés au render).
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EFFETS — TRANSFORMS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- canonical: "Transform"
+  synonyms:
+    - "transform"
+    - "effect transform"
+    - "coordinate transform"
+    - "transformation"
+  rejected:
+    - term: "filter"
+      reason: "Filter implique une modification du pixel — Transform remplace des coordonnées"
+    - term: "shader"
+      reason: "Shader est un terme GPU — Transform est une interface Java pure"
+  broader:
+    - "EffectPipeline"
+  narrower:
+    - "scrollH"
+    - "scrollV"
+    - "zoom"
+    - "rotate"
+  related:
+    - "prepare"
+    - "srcX"
+    - "srcY"
+    - "bilinear interpolation"
+  notes: >
+    Interface interne à EffectPipeline. prepare() précalcule les constantes
+    par render. srcX/srcY calculent les coordonnées source par pixel.
+
+- canonical: "bilinear interpolation"
+  synonyms:
+    - "bilinear sampling"
+    - "bilinear filtering"
+    - "interpolation bilinéaire"  # [FR]
+  rejected:
+    - term: "antialiasing"
+      reason: "Antialiasing est un effet de bord de l'interpolation, pas son but ici"
+    - term: "nearest neighbour"
+      reason: "Nearest neighbour est le mode alternatif — pas celui utilisé par défaut"
+    - term: "linear interpolation"
+      reason: "Linear est 1D — bilinear est l'extension 2D, terme précis requis"
+  broader:
+    - "sampling"
+  narrower: []
+  related:
+    - "zoom"
+    - "rotate"
+    - "edge clamping"
+    - "srcX"
+    - "srcY"
+  notes: >
+    Utilisé par zoom et rotate pour les coordonnées fractionnaires.
+    scrollH/scrollV produisent des coordonnées entières → pas de bilinéaire.
+
+- canonical: "edge clamping"
+  synonyms:
+    - "border clamping"
+    - "clamp to edge"
+    - "clampage de bord"      # [FR]
+  rejected:
+    - term: "clipping"
+      reason: "Clipping signifie rejeter les pixels hors bornes — clamping répète le bord"
+    - term: "padding"
+      reason: "Padding ajoute des pixels — clamping répète le dernier pixel existant"
+  broader:
+    - "bilinear interpolation"
+  narrower: []
+  related:
+    - "bounded source"
+    - "zoom"
+    - "rotate"
+  notes: >
+    Pour les sources bornées uniquement : quand x0 == srcW-1, x1 = x0 (bord répété).
+    Les sources unbounded (WRAP) n'utilisent pas le clamping.
+
+- canonical: "prepare"
+  synonyms:
+    - "prepare()"
+    - "pre-computation"
+    - "per-render setup"
+    - "précalcul par render"  # [FR]
+  rejected:
+    - term: "init"
+      reason: "init suggère une initialisation unique — prepare() est appelé chaque render"
+    - term: "setup"
+      reason: "Trop générique"
+  broader:
+    - "Transform"
+  narrower: []
+  related:
+    - "rotate"
+    - "zoom"
+  notes: >
+    Méthode default de Transform. Appelée une fois par render par layer,
+    avant la boucle pixels. Précalcule cos/sin pour rotate, centre pour zoom.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COUCHE ANIMATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- canonical: "Orchestrator"
+  synonyms:
+    - "animation orchestrator"
+    - "animation loop"
+    - "frame loop controller"
+    - "orchestrateur"         # [FR]
+  rejected:
+    - term: "Animator"
+      reason: "Nom écarté en session 2026-04-27 au profit d'Orchestrator"
+    - term: "GameLoop"
+      reason: "GameLoop suggère un contexte jeu — Orchestrator est une bibliothèque graphique générale"
+    - term: "RenderLoop"
+      reason: "RenderLoop ne capture pas le rôle d'orchestration (timing, buffering, callback)"
+  broader:
+    - "animation layer"
+  narrower: []
+  related:
+    - "StagePool"
+    - "EffectPipeline"
+    - "FrameCallback"
+    - "render thread"
+    - "display thread"
+    - "targetFps"
+  notes: >
+    Gère le thread de rendu, le timing, et délègue l'affichage au développeur
+    via StagePool.getFrontBuffer(). Construit par API fluide, verrouillé par build().
+
+- canonical: "StagePool"
+  synonyms:
+    - "stage pool"
+    - "buffer pool"
+    - "swap chain"            # acceptable en contexte graphique général
+    - "pool de buffers"       # [FR]
+  rejected:
+    - term: "double buffer"
+      reason: "Double buffer est une configuration de StagePool (bufferCount=2), pas la classe"
+    - term: "BufferStrategy"
+      reason: "BufferStrategy est une classe AWT — couplage toolkit interdit"
+    - term: "WingState"
+      reason: "Nom historique abandonné lors du redesign 2026-04-26"
+  broader: []
+  narrower:
+    - "back buffer"
+    - "front buffer"
+  related:
+    - "Orchestrator"
+    - "FrameDropPolicy"
+    - "acquireBackBuffer"
+    - "present"
+    - "getFrontBuffer"
+    - "double buffering"
+    - "triple buffering"
+  notes: >
+    File bornée de N stages (N >= 2). Pas de circular overwrite —
+    le render thread bloque quand tous les stages sont occupés.
+
+- canonical: "back buffer"
+  synonyms:
+    - "back stage"
+    - "render buffer"
+    - "rendering stage"
+    - "buffer de rendu"       # [FR]
+  rejected:
+    - term: "offscreen buffer"
+      reason: "Offscreen désigne un contexte graphique AWT — ici c'est un Stage"
+    - term: "working buffer"
+      reason: "Non utilisé dans le projet"
+  broader:
+    - "StagePool"
+  narrower: []
+  related:
+    - "acquireBackBuffer"
+    - "present"
+    - "render thread"
+  notes: >
+    Stage acquis par le render thread via acquireBackBuffer(). Rendu dans
+    ce stage, puis présenté via present().
+
+- canonical: "front buffer"
+  synonyms:
+    - "display buffer"
+    - "display stage"
+    - "buffer d'affichage"    # [FR]
+    - "presented frame"
+  rejected:
+    - term: "screen buffer"
+      reason: "Screen implique un affichage — front buffer est toolkit-agnostic"
+  broader:
+    - "StagePool"
+  narrower: []
+  related:
+    - "getFrontBuffer"
+    - "display thread"
+    - "FrameDropPolicy"
+  notes: >
+    Stage actuellement affiché, retourné par getFrontBuffer().
+    L'utilisateur l'affiche via le toolkit de son choix.
+
+- canonical: "double buffering"
+  synonyms:
+    - "double buffer"
+    - "double-buffering"
+    - "double tampon"         # [FR]
+    - "2-buffer"
+  rejected:
+    - term: "page flipping"
+      reason: "Page flipping est une technique GPU/AWT (BufferStrategy) — double buffering est le concept général"
+  broader:
+    - "buffering strategy"
+  narrower: []
+  related:
+    - "StagePool"
+    - "triple buffering"
+  notes: >
+    StagePool avec bufferCount=2. Le render thread peut avoir 0 frame d'avance
+    sur le display thread — il attend après chaque present().
+
+- canonical: "triple buffering"
+  synonyms:
+    - "triple buffer"
+    - "triple-buffering"
+    - "triple tampon"         # [FR]
+    - "3-buffer"
+  rejected:
+    - term: "circular buffer"
+      reason: "Circular buffer avec écrasement circulaire est le modèle rejeté — StagePool utilise une file bornée"
+    - term: "ring buffer"
+      reason: "Ring buffer implique l'écrasement — non, le render thread bloque"
+  broader:
+    - "buffering strategy"
+  narrower: []
+  related:
+    - "StagePool"
+    - "double buffering"
+  notes: >
+    StagePool avec bufferCount=3. Le render thread peut avoir 1 frame d'avance
+    sur le display thread avant de bloquer.
+
+- canonical: "frame drop"
+  synonyms:
+    - "dropped frame"
+    - "missed frame"
+    - "saut de frame"         # [FR]
+    - "frame manquée"         # [FR]
+  rejected:
+    - term: "frame skip"
+      reason: "Frame skip est une stratégie de récupération (SKIP policy), pas le problème en lui-même"
+    - term: "frame loss"
+      reason: "Frame loss est acceptable mais moins précis que frame drop dans le contexte temps réel"
+    - term: "jank"
+      reason: "Jank désigne un effet visuel perceptible — frame drop est la cause technique"
+  broader:
+    - "timing issue"
+  narrower: []
+  related:
+    - "FrameDropPolicy"
+    - "display thread"
+    - "render thread"
+    - "getFrontBuffer"
+  notes: >
+    Situation où le display thread demande la prochaine frame mais le render
+    thread ne l'a pas encore produite. Géré par FrameDropPolicy.
+
+- canonical: "FrameDropPolicy"
+  synonyms:
+    - "frame drop policy"
+    - "drop policy"
+    - "politique de frame drop"  # [FR]
+  rejected:
+    - term: "FrameDropStrategy"
+      reason: "Nom utilisé dans ARCHITECTURE.md v1 — remplacé par FrameDropPolicy dans le code"
+    - term: "BufferPolicy"
+      reason: "Trop générique — ne désigne pas spécifiquement le comportement en cas de frame drop"
+  broader:
+    - "StagePool"
+  narrower:
+    - "EXCEPTION"
+    - "WAIT"
+    - "REPEAT_LAST"
+    - "WARN_AND_REPEAT"
+    - "SKIP"
+  related:
+    - "frame drop"
+    - "getFrontBuffer"
+  notes: >
+    Enum définie à la construction de StagePool. Détermine le comportement
+    de getFrontBuffer() quand aucune frame n'est prête.
+
+- canonical: "FrameDropException"
+  synonyms:
+    - "frame drop exception"
+  rejected:
+    - term: "WingNotReadyException"
+      reason: "Nom historique abandonné — Wing a été renommé Stage, l'exception renommée en conséquence"
+    - term: "FrameNotReadyException"
+      reason: "Non utilisé dans le code"
+    - term: "BufferNotReadyException"
+      reason: "Non utilisé dans le code"
+  broader:
+    - "RuntimeException"
+  narrower: []
+  related:
+    - "FrameDropPolicy"
+    - "EXCEPTION policy"
+  notes: >
+    Levée par getFrontBuffer() uniquement quand FrameDropPolicy == EXCEPTION.
+
+- canonical: "FrameCallback"
+  synonyms:
+    - "frame callback"
+    - "update callback"
+    - "per-frame callback"
+    - "callback de frame"     # [FR]
+  rejected:
+    - term: "tick"
+      reason: "Tick est un terme de game loop — acceptable en contexte jeu mais pas dans la lib"
+    - term: "update"
+      reason: "Trop générique"
+    - term: "onTick"
+      reason: "Non utilisé dans l'API"
+  broader:
+    - "Orchestrator"
+  narrower: []
+  related:
+    - "onFrame"
+    - "frameIndex"
+    - "deltaMs"
+  notes: >
+    Interface fonctionnelle. Appelée par l'Orchestrator une fois par frame,
+    avant le render, sur le render thread. Le développeur y met à jour
+    ses ParamInt / ParamDouble.
+
+- canonical: "render thread"
+  synonyms:
+    - "rendering thread"
+    - "producer thread"
+    - "thread de rendu"       # [FR]
+  rejected:
+    - term: "background thread"
+      reason: "Background thread est une propriété (daemon), pas un rôle"
+    - term: "worker thread"
+      reason: "Trop générique"
+  broader:
+    - "Orchestrator"
+  narrower: []
+  related:
+    - "display thread"
+    - "acquireBackBuffer"
+    - "present"
+    - "FrameCallback"
+
+- canonical: "display thread"
+  synonyms:
+    - "consumer thread"
+    - "UI thread"             # acceptable si l'application est Swing/JavaFX
+    - "thread d'affichage"    # [FR]
+  rejected:
+    - term: "EDT"
+      reason: "EDT (Event Dispatch Thread) est spécifique à Swing — display thread est toolkit-agnostic"
+    - term: "main thread"
+      reason: "Pas nécessairement le thread principal"
+  broader:
+    - "StagePool"
+  narrower: []
+  related:
+    - "render thread"
+    - "getFrontBuffer"
+    - "FrameDropPolicy"
+    - "front buffer"
+
+- canonical: "targetFps"
+  synonyms:
+    - "target FPS"
+    - "target frame rate"
+    - "desired frame rate"
+    - "fréquence cible"       # [FR]
+    - "FPS cible"             # [FR]
+  rejected:
+    - term: "refresh rate"
+      reason: "Refresh rate désigne la fréquence d'un écran physique — targetFps est la fréquence de rendu"
+    - term: "tick rate"
+      reason: "Tick rate est un terme de game loop/serveur"
+  broader:
+    - "Orchestrator"
+  narrower: []
+  related:
+    - "render thread"
+    - "frame"
+  notes: >
+    Entier strictement positif. L'Orchestrator dort le temps restant pour
+    atteindre cette fréquence. Ne garantit pas la fréquence si le rendu
+    dépasse le budget de temps.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONCEPTS ARCHITECTURAUX TRANSVERSAUX
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- canonical: "fluent API"
+  synonyms:
+    - "fluent builder"
+    - "method chaining"
+    - "builder pattern"
+    - "API fluide"            # [FR]
+    - "chaînage de méthodes"  # [FR]
+  rejected:
+    - term: "DSL"
+      reason: "DSL (Domain Specific Language) est trop large — fluent API désigne le pattern précis"
+  broader:
+    - "design pattern"
+  narrower: []
+  related:
+    - "EffectPipeline"
+    - "Orchestrator"
+    - "build"
+  notes: >
+    Utilisé par EffectPipeline et Orchestrator. Méthodes de configuration
+    retournent this. build() verrouille la structure.
+
+- canonical: "stateless pipeline"
+  synonyms:
+    - "stateless"
+    - "pipeline stateless"
+    - "immutable structure"
+  rejected:
+    - term: "pure function"
+      reason: "Pure function désigne l'absence d'effets de bord — stateless désigne l'absence d'état variable dans la structure"
+  broader:
+    - "EffectPipeline"
+  narrower: []
+  related:
+    - "ParamInt"
+    - "ParamDouble"
+    - "build"
+  notes: >
+    Après build(), la structure d'EffectPipeline est fixe et immuable.
+    L'état variable est entièrement porté par les ParamInt / ParamDouble.
+
+- canonical: "toolkit-agnostic"
+  synonyms:
+    - "toolkit-independent"
+    - "GUI-independent"
+    - "portable"
+    - "indépendant du toolkit"  # [FR]
+  rejected:
+    - term: "headless"
+      reason: "Headless désigne un contexte sans affichage — toolkit-agnostic désigne l'indépendance du choix de toolkit"
+    - term: "cross-platform"
+      reason: "Cross-platform désigne l'OS — toolkit-agnostic désigne l'indépendance vis-à-vis de Swing/JavaFX/SWT"
+  broader: []
+  narrower: []
+  related:
+    - "Stage"
+    - "BufferedImage"
+  notes: >
+    Principe fondamental du projet. Pas d'import Swing, JavaFX ou SWT
+    dans la bibliothèque. La sortie est toujours un BufferedImage via Stage.
+
+- canonical: "frame"
+  synonyms:
+    - "animation frame"
+    - "image"                 # acceptable en français uniquement
+    - "trame"                 # [FR] — peu usité, préférer "frame"
+  rejected:
+    - term: "tick"
+      reason: "Tick est un terme de game loop — frame est le terme graphique précis"
+    - term: "snapshot"
+      reason: "Snapshot implique une copie — une frame est un rendu live dans un Stage"
+  broader: []
+  narrower: []
+  related:
+    - "render"
+    - "EffectPipeline"
+    - "Stage"
+    - "frameIndex"
+    - "deltaMs"
+  notes: >
+    Une frame = un rendu complet dans un Stage. frameIndex commence à 0.
+    deltaMs = temps écoulé depuis la frame précédente (0 pour la frame 0).

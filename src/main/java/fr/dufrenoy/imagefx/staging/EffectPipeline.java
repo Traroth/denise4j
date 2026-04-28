@@ -20,7 +20,9 @@
  * License along with this library; if not, see
  * <https://www.gnu.org/licenses/>.
  */
-package fr.dufrenoy.imagefx;
+package fr.dufrenoy.imagefx.staging;
+
+import fr.dufrenoy.imagefx.source.PixelSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
