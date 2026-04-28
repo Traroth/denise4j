@@ -166,4 +166,4 @@ mvn verify -P openjml-windows
 
 ## Licence
 
-GNU Lesser General Public License v3 — voir `LGPL-3.0`.
+[GNU Lesser General Public License v3](https://www.gnu.org/licenses/lgpl-3.0.html) — voir `LICENCE`.
