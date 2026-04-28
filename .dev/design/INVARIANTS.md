@@ -128,8 +128,10 @@ Each effect method adds a `Transform` to the current layer's chain.
 The following invariants apply to any `Transform` at render time:
 
     // prepare() is called exactly once per render per layer, before the pixel loop
-    // srcX(x, y) and srcY(x, y) are called for every stage pixel
+    // apply(double[] coords) is called for every stage pixel (coords[0]=srcX, coords[1]=srcY)
+    // apply() must read both coords values before writing either (correctness for rotation)
     // All coordinates are double — rounding is deferred to the bilinear sampler
+    // Layer.transformsArr is a Transform[] frozen at build() — immutable during render
 
 ## Effect — `scrollH`
 

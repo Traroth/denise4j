@@ -276,6 +276,8 @@ public class Orchestrator {
         final long frameNanos = 1_000_000_000L / targetFps;
         long frameIndex = 0;
         long lastFrameStart = -1L;
+        // Absolute target for the end of the current frame; corrects accumulated drift.
+        long targetTime = System.nanoTime() + frameNanos;
 
         while (running) {
             long frameStart = System.nanoTime();
@@ -289,11 +291,11 @@ public class Orchestrator {
                 stagePool.present(back);
                 frameIndex++;
 
-                long elapsed = System.nanoTime() - frameStart;
-                long remaining = frameNanos - elapsed;
+                long remaining = targetTime - System.nanoTime();
                 if (remaining > 1_000_000L) {
-                    Thread.sleep(remaining / 1_000_000L, (int) (remaining % 1_000_000L));
+                    Thread.sleep(remaining / 1_000_000L, (int)(remaining % 1_000_000L));
                 }
+                targetTime += frameNanos;
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 break;

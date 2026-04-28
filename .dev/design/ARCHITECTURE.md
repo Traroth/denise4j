@@ -224,16 +224,23 @@ interface interne `Transform` dans `EffectPipeline` :
 ```java
 interface Transform {
     default void prepare(int stageW, int stageH) {}
-    double srcX(double x, double y);
-    double srcY(double x, double y);
+    void apply(double[] coords); // coords[0]=srcX, coords[1]=srcY, modifies in place
 }
 ```
 
 **Design choices:**
 - `prepare(stageW, stageH)` est appelee une fois par render, par layer, avant la boucle pixels — precompute cos/sin pour rotate, centre pour zoom, evite tout calcul par pixel inutile
 - Les coordonnees sont des `double` tout au long de la chaine de transforms — les arrondis (bilineaire vs plus-proche-voisin) sont determines au moment de l'echantillonnage, pas dans les transforms
-- Chaque transform recoit `(sx, sy)` courant et retourne les nouvelles coordonnees sources — composition par chaining sequentiel
+- `apply(double[] coords)` mutate le tableau en place — un seul appel virtuel par transform par pixel au lieu de deux (`srcX` + `srcY`). Pour `RotateTransform`, dx/dy sont captures avant toute modification du tableau, garantissant que les deux sorties utilisent les coordonnees d'entree originales
 - Le pipeline compose les transforms dans l'ordre de declaration (ordre d'application = ordre de lecture dans le code)
+- Apres `build()`, chaque layer stocke ses transforms dans un `Transform[]` (tableau fixe) — acces direct sans overhead `ArrayList` iterator
+
+**Rendu parallele:**
+La boucle sur les lignes y est parallelisee via `IntStream.range(0, h).parallel()` par layer. Chaque tache y ecrit exclusivement `pixels[y*w .. y*w+w-1]` — pas de contention sur le tableau de pixels. Les sources (`PixelSource`) sont en lecture seule pendant le render. Les champs de Transform (`cosA`, `sinA`, etc.) sont ecrits par `prepare()` avant le `forEach` et lus en lecture seule dans les taches paralleles — garantie happens-before du fork-join pool.
+
+**Alternatives rejetees:**
+- `double srcX(x,y)` + `double srcY(x,y)` en deux appels virtuels — `RotateTransform` recalculait `dx = x-cx`, `dy = y-cy` deux fois ; 2× plus de dispatch virtuel par transform par pixel
+- `double[] apply(x,y)` retournant un nouveau tableau — allocation par pixel par transform, inacceptable en hot loop
 
 ---
 

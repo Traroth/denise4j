@@ -114,6 +114,18 @@ of each session.
 
 - [x] FleursDemoExample — zoom + rotation de fleurs.jpg en plein écran (session 2026-04-28)
 - [x] PaysageDemoExample — scrolling Lissajous multidirectionnel sur paysage_montagne.jpg (session 2026-04-28)
+- [x] ShadowDemo — parallax 5 couches inspiré Shadow of the Beast : ciel dégradé+lune, nuages, aiguilles rocheuses ocre, masses rocheuses sombres, menhirs ardoise (session 2026-04-29)
+
+---
+
+## Optimisations (session 2026-04-29)
+
+- [x] EffectPipeline — Transform interface : `apply(double[] coords)` remplace `srcX/srcY` séparés (1 dispatch virtuel au lieu de 2, RotateTransform calcule dx/dy une seule fois)
+- [x] EffectPipeline — bilinéaire virgule fixe entière (poids ×256, shift) — supprime 16 multiplications double + 4 Math.round() par pixel bilinéaire
+- [x] EffectPipeline — boucle y parallélisée par layer via `IntStream.range(0, h).parallel()` — thread-safe : chaque tâche écrit pixels[y*w..y*w+w-1] exclusivement, sources read-only
+- [x] EffectPipeline — `Layer.transformsArr` (Transform[]) figé à build() — évite l'overhead ArrayList iterator en hot loop
+- [x] Orchestrator — drift correction : cible temporelle absolue (`targetTime += frameNanos`) au lieu de `frameNanos - elapsed` — compense les overruns sans dériver sur la durée
+- [x] White-box tests : bilinéaire précision à 0.5 et 2D midpoint, determinisme du rendu parallèle, dx/dy pré-sauvés dans RotateTransform.apply()
 
 ---
 

@@ -121,6 +121,7 @@ application plein écran autonome (AWT, sans Swing). Appuyer sur `SPACE` pour qu
 |---|---|---|
 | `FleursDemoExample` | Rotation continue + zoom sinusoïdal (effet mandala) | `fleurs.jpg` |
 | `PaysageDemoExample` | Scrolling multidirectionnel sur courbe de Lissajous 3:2 | `paysage_montagne.jpg` |
+| `ShadowDemo` | Parallax 5 couches inspiré de *Shadow of the Beast* — ciel dégradé + lune, nuages, aiguilles rocheuses ocre, menhirs ardoise | génératif |
 
 ---
 

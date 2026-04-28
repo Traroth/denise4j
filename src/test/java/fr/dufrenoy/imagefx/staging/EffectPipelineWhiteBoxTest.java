@@ -42,6 +42,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  *   <li>Transform chaining order (non-commutative).</li>
  *   <li>{@code prepare()} called once per render, not per pixel.</li>
  *   <li>Bilinear edge clamping for bounded sources.</li>
+ *   <li>Fixed-point bilinear precision at 0.5 and 2-D midpoints.</li>
+ *   <li>Parallel rendering determinism (parallel stream per y-row).</li>
+ *   <li>{@code RotateTransform.apply()} saves dx/dy before updating coords.</li>
  * </ul>
  */
 class EffectPipelineWhiteBoxTest {
@@ -182,5 +185,124 @@ class EffectPipelineWhiteBoxTest {
                 .render(stage);
         assertEquals(RED,  px(stage, 0, 0));
         assertEquals(BLUE, px(stage, 1, 0));
+    }
+
+    // ─── Fixed-point bilinear precision ──────────────────────────────────────────
+
+    @Test
+    void bilinearAtExactHalfpointGivesMidpointChannel() {
+        // zoom(2, cx=0) on [RED=0xFFFF0000, BLUE=0xFF0000FF]. stage(1) → srcX=0.5.
+        // ftx=128, itx=128, fty=0, ity=256.
+        // r-channel: (255*128)*256 + 32768 >> 16 = 8388608 >> 16 = 128.
+        // b-channel: (255*128)*256 + 32768 >> 16 = 128.
+        // Expected: 0xFF800080.
+        Stage stage = new Stage(4, 1, BLACK);
+        new EffectPipeline()
+                .addSource(grid(new int[][] {{ RED, BLUE }}))
+                .zoom(new ParamDouble(2.0), new ParamDouble(0), new ParamDouble(0))
+                .build()
+                .render(stage);
+        assertEquals(0xFF800080, px(stage, 1, 0));
+    }
+
+    @Test
+    void bilinearAtExact2DHalfpointGivesAverageOfFourCorners() {
+        // 2×2 source: RED, BLUE top row; GREEN, BLACK bottom row.
+        // zoom(2, cx=0, cy=0), stage 4×4. stage(1,1) → srcX=0.5, srcY=0.5.
+        // All four corners contribute equally (weight 0.25 each).
+        // r: round((255+0+0+0)/4) = 64. g: round((0+0+255+0)/4) = 64. b: round((0+255+0+0)/4) = 64.
+        Stage stage = new Stage(4, 4, BLACK);
+        new EffectPipeline()
+                .addSource(grid(new int[][] {
+                        { RED,   BLUE  },
+                        { GREEN, BLACK }
+                }))
+                .zoom(new ParamDouble(2.0), new ParamDouble(0), new ParamDouble(0))
+                .build()
+                .render(stage);
+        int pixel = px(stage, 1, 1);
+        int r = (pixel >> 16) & 0xFF;
+        int g = (pixel >>  8) & 0xFF;
+        int b =  pixel        & 0xFF;
+        // Fixed-point rounding: (255*128*128 + 32768) >> 16 = 8421248 >> 16 = 128...
+        // Actually with four equal-weight corners: each weight = 128*128 = 16384 out of 65536.
+        // r = (255*16384 + 0 + 0 + 0 + 32768) >> 16 = (4194048 + 32768) >> 16 = 4226816 >> 16 = 64.
+        assertEquals(64, r, 1); // tolerance 1 for fixed-point rounding
+        assertEquals(64, g, 1);
+        assertEquals(64, b, 1);
+    }
+
+    // ─── Parallel rendering determinism ──────────────────────────────────────────
+
+    @Test
+    void parallelRenderProducesDeterministicResults() {
+        // Parallel streams must produce identical pixel values on every call.
+        // Uses zoom + rotate to exercise the bilinear path across many pixels.
+        BufferedImage sheet = new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB);
+        int[] colors = { RED, GREEN, BLUE, BLACK };
+        for (int y = 0; y < 4; y++)
+            for (int x = 0; x < 4; x++)
+                sheet.setRGB(x, y, colors[(x + y) % 4]);
+        TileSet ts = new TileSet(sheet, 1, 1);
+        TileMap map = new TileMap(ts, 4, 4, TileMap.EdgePolicy.WRAP);
+        int[][] tiles = { {0,1,2,3}, {1,2,3,0}, {2,3,0,1}, {3,0,1,2} };
+        map.setTiles(0, 0, tiles);
+
+        EffectPipeline pipeline = new EffectPipeline()
+                .addSource(map)
+                .zoom(new ParamDouble(1.3))
+                .rotate(new ParamDouble(0.7))
+                .build();
+
+        Stage reference = new Stage(16, 16, BLACK);
+        pipeline.render(reference);
+        int[] refPixels = reference.getPixels().clone();
+
+        for (int i = 0; i < 4; i++) {
+            Stage stage = new Stage(16, 16, BLACK);
+            pipeline.render(stage);
+            int[] got = stage.getPixels();
+            for (int p = 0; p < got.length; p++) {
+                assertEquals(refPixels[p], got[p],
+                        "pixel mismatch at index " + p + " on run " + i);
+            }
+        }
+    }
+
+    // ─── RotateTransform: dx/dy captured before c[0] update ──────────────────────
+
+    @Test
+    void rotateApplyUsesOriginalCoordsToDerivesBothOutputs() {
+        // 90° CW rotation around (1,1): srcX = 1 + dx*0 + dy*1 = 1 + dy,
+        //                               srcY = 1 - dx*1 + dy*0 = 1 - dx.
+        // stage(2,1): dx=1, dy=0 → srcX=1, srcY=0 → GREEN.
+        // stage(1,2): dx=0, dy=1 → srcX=2, srcY=1 → GREEN.
+        // If c[0] were updated before c[1] used it, srcY would use the wrong value.
+        BufferedImage sheet = new BufferedImage(3, 3, BufferedImage.TYPE_INT_ARGB);
+        int[][] src = {
+                { RED,   GREEN, BLUE  },
+                { BLACK, RED,   GREEN },
+                { BLUE,  BLACK, RED   }
+        };
+        for (int y = 0; y < 3; y++)
+            for (int x = 0; x < 3; x++)
+                sheet.setRGB(x, y, src[y][x]);
+        TileSet ts = new TileSet(sheet, 1, 1);
+        TileMap map = new TileMap(ts, 3, 3, TileMap.EdgePolicy.WRAP);
+        int[][] tiles = { {0,1,2}, {3,4,5}, {6,7,8} };
+        map.setTiles(0, 0, tiles);
+
+        Stage stage = new Stage(3, 3, BLACK);
+        new EffectPipeline()
+                .addSource(map)
+                .rotate(new ParamDouble(Math.PI / 2),
+                        new ParamDouble(1), new ParamDouble(1))
+                .build()
+                .render(stage);
+
+        // stage(2,1): dx=1, dy=0 → srcX=1, srcY=0 → GREEN
+        assertEquals(GREEN, px(stage, 2, 1));
+        // stage(1,2): dx=0, dy=1 → srcX=2, srcY=1 → GREEN
+        assertEquals(GREEN, px(stage, 1, 2));
     }
 }

@@ -27,6 +27,7 @@ import fr.dufrenoy.imagefx.source.PixelSource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * A chain of graphical effects rendered into a {@link Stage}.
@@ -80,22 +81,25 @@ public class EffectPipeline {
     private interface Transform {
         /** Called once per render call before the pixel loop. */
         default void prepare(int stageW, int stageH) {}
-        double srcX(double x, double y);
-        double srcY(double x, double y);
+
+        /**
+         * Applies this transform in-place on {@code coords}.
+         * {@code coords[0]} is srcX, {@code coords[1]} is srcY.
+         * Implementations must read both values before writing either.
+         */
+        void apply(double[] coords);
     }
 
     private static final class ScrollHTransform implements Transform {
         final ParamInt offset;
         ScrollHTransform(ParamInt offset) { this.offset = offset; }
-        public double srcX(double x, double y) { return x + offset.get(); }
-        public double srcY(double x, double y) { return y; }
+        public void apply(double[] c) { c[0] += offset.get(); }
     }
 
     private static final class ScrollVTransform implements Transform {
         final ParamInt offset;
         ScrollVTransform(ParamInt offset) { this.offset = offset; }
-        public double srcX(double x, double y) { return x; }
-        public double srcY(double x, double y) { return y + offset.get(); }
+        public void apply(double[] c) { c[1] += offset.get(); }
     }
 
     private static final class ZoomTransform implements Transform {
@@ -116,8 +120,11 @@ public class EffectPipeline {
             cyVal = cy != null ? cy.get() : stageH / 2.0;
         }
 
-        public double srcX(double x, double y) { return cxVal + (x - cxVal) / factorVal; }
-        public double srcY(double x, double y) { return cyVal + (y - cyVal) / factorVal; }
+        // srcX and srcY are independent: updating c[0] first is safe.
+        public void apply(double[] c) {
+            c[0] = cxVal + (c[0] - cxVal) / factorVal;
+            c[1] = cyVal + (c[1] - cyVal) / factorVal;
+        }
     }
 
     private static final class RotateTransform implements Transform {
@@ -137,14 +144,12 @@ public class EffectPipeline {
             cyVal = cy != null ? cy.get() : stageH / 2.0;
         }
 
-        public double srcX(double x, double y) {
-            double dx = x - cxVal, dy = y - cyVal;
-            return cxVal + dx * cosA + dy * sinA;
-        }
-
-        public double srcY(double x, double y) {
-            double dx = x - cxVal, dy = y - cyVal;
-            return cyVal - dx * sinA + dy * cosA;
+        // dx/dy are saved before modifying c[0]: both outputs use original input.
+        public void apply(double[] c) {
+            double dx = c[0] - cxVal;
+            double dy = c[1] - cyVal;
+            c[0] = cxVal + dx * cosA + dy * sinA;
+            c[1] = cyVal - dx * sinA + dy * cosA;
         }
     }
 
@@ -155,6 +160,7 @@ public class EffectPipeline {
         int transparentColor;
         boolean hasTransparentColor;
         final List<Transform> transforms = new ArrayList<>();
+        Transform[] transformsArr; // set at build(), used during render()
 
         Layer(PixelSource source) {
             this.source = source;
@@ -436,6 +442,9 @@ public class EffectPipeline {
     public EffectPipeline build() {
         requireNotBuilt();
         requireHasSource();
+        for (Layer layer : layers) {
+            layer.transformsArr = layer.transforms.toArray(new Transform[0]);
+        }
         built = true;
         return this;
     }
@@ -477,8 +486,12 @@ public class EffectPipeline {
      *   <li>Otherwise, the source pixel overwrites the stage pixel.</li>
      * </ul>
      * <p>Fractional source coordinates are resolved by bilinear
-     * interpolation. For bounded sources the edge pixel is repeated when
-     * a bilinear neighbour would fall outside the source.</p>
+     * interpolation using fixed-point arithmetic. For bounded sources the
+     * edge pixel is repeated when a bilinear neighbour would fall outside
+     * the source.</p>
+     *
+     * <p>Each layer's pixel rows are rendered in parallel using the
+     * common fork-join pool.</p>
      *
      * @param stage the target stage
      * @throws NullPointerException     if {@code stage} is {@code null}
@@ -492,75 +505,81 @@ public class EffectPipeline {
         if (!built) throw new IllegalStateException("Pipeline has not been built");
         if (stage == null) throw new NullPointerException("stage must not be null");
 
-        int w = stage.getWidth();
-        int h = stage.getHeight();
-        int[] pixels = stage.getPixels();
+        final int w = stage.getWidth();
+        final int h = stage.getHeight();
+        final int[] pixels = stage.getPixels();
 
         Arrays.fill(pixels, stage.getBackgroundColor());
 
         for (Layer layer : layers) {
-            PixelSource src = layer.source;
-            boolean unbounded = src.isUnbounded();
-            int srcW = src.getWidth();
-            int srcH = src.getHeight();
-            List<Transform> transforms = layer.transforms;
+            final PixelSource src = layer.source;
+            final boolean unbounded = src.isUnbounded();
+            final int srcW = src.getWidth();
+            final int srcH = src.getHeight();
+            final Transform[] transforms = layer.transformsArr;
+            final boolean hasTC = layer.hasTransparentColor;
+            final int tc = layer.transparentColor;
 
             for (Transform t : transforms) t.prepare(w, h);
-            boolean hasTransforms = !transforms.isEmpty();
 
-            for (int y = 0; y < h; y++) {
+            IntStream.range(0, h).parallel().forEach(y -> {
+                final double[] coords = new double[2];
                 for (int x = 0; x < w; x++) {
-                    double sx = x, sy = y;
-                    if (hasTransforms) {
-                        for (Transform t : transforms) {
-                            double nsx = t.srcX(sx, sy);
-                            sy = t.srcY(sx, sy);
-                            sx = nsx;
-                        }
-                    }
+                    coords[0] = x;
+                    coords[1] = y;
+                    for (Transform t : transforms) t.apply(coords);
 
-                    int x0 = (int) Math.floor(sx);
-                    int y0 = (int) Math.floor(sy);
+                    final double sx = coords[0];
+                    final double sy = coords[1];
+                    final int x0 = (int) Math.floor(sx);
+                    final int y0 = (int) Math.floor(sy);
+
                     if (!unbounded && (x0 < 0 || x0 >= srcW || y0 < 0 || y0 >= srcH)) continue;
 
-                    double tx = sx - x0;
-                    double ty = sy - y0;
-                    int pixel;
+                    final double tx = sx - x0;
+                    final double ty = sy - y0;
+                    final int pixel;
                     if (tx == 0.0 && ty == 0.0) {
                         pixel = src.getPixel(x0, y0);
                     } else {
-                        int x1 = unbounded ? x0 + 1 : Math.min(x0 + 1, srcW - 1);
-                        int y1 = unbounded ? y0 + 1 : Math.min(y0 + 1, srcH - 1);
+                        final int x1 = unbounded ? x0 + 1 : Math.min(x0 + 1, srcW - 1);
+                        final int y1 = unbounded ? y0 + 1 : Math.min(y0 + 1, srcH - 1);
                         pixel = bilinear(
                                 src.getPixel(x0, y0), src.getPixel(x1, y0),
                                 src.getPixel(x0, y1), src.getPixel(x1, y1),
                                 tx, ty);
                     }
 
-                    if (layer.hasTransparentColor && pixel == layer.transparentColor) continue;
+                    if (hasTC && pixel == tc) continue;
                     pixels[y * w + x] = pixel;
                 }
-            }
+            });
         }
     }
 
     // ─── Bilinear sampling helpers ───────────────────────────────────────────────
 
+    /**
+     * Bilinear interpolation using 8-bit fixed-point weights.
+     * Weights ftx, fty ∈ [0,255], itx = 256−ftx, ity = 256−fty.
+     * Result per channel: (c00·itx·ity + c10·ftx·ity + c01·itx·fty + c11·ftx·fty + 32768) >> 16.
+     * Intermediate values fit in int (max ~33M < 2³¹). No clamping required.
+     */
     private static int bilinear(int p00, int p10, int p01, int p11, double tx, double ty) {
-        double w00 = (1.0 - tx) * (1.0 - ty);
-        double w10 = tx          * (1.0 - ty);
-        double w01 = (1.0 - tx) * ty;
-        double w11 = tx          * ty;
-        int a = clamp((int) Math.round((p00 >>> 24) * w00 + (p10 >>> 24) * w10
-                                     + (p01 >>> 24) * w01 + (p11 >>> 24) * w11));
-        int r = clamp((int) Math.round((p00 >> 16 & 0xFF) * w00 + (p10 >> 16 & 0xFF) * w10
-                                     + (p01 >> 16 & 0xFF) * w01 + (p11 >> 16 & 0xFF) * w11));
-        int g = clamp((int) Math.round((p00 >>  8 & 0xFF) * w00 + (p10 >>  8 & 0xFF) * w10
-                                     + (p01 >>  8 & 0xFF) * w01 + (p11 >>  8 & 0xFF) * w11));
-        int b = clamp((int) Math.round((p00        & 0xFF) * w00 + (p10        & 0xFF) * w10
-                                     + (p01        & 0xFF) * w01 + (p11        & 0xFF) * w11));
+        final int ftx = (int)(tx * 256);
+        final int fty = (int)(ty * 256);
+        final int itx = 256 - ftx;
+        final int ity = 256 - fty;
+
+        final int a = (((p00 >>> 24)        * itx + (p10 >>> 24)        * ftx) * ity
+                     + ((p01 >>> 24)        * itx + (p11 >>> 24)        * ftx) * fty + 32768) >> 16;
+        final int r = ((((p00 >> 16) & 0xFF) * itx + ((p10 >> 16) & 0xFF) * ftx) * ity
+                     + (((p01 >> 16) & 0xFF) * itx + ((p11 >> 16) & 0xFF) * ftx) * fty + 32768) >> 16;
+        final int g = ((((p00 >>  8) & 0xFF) * itx + ((p10 >>  8) & 0xFF) * ftx) * ity
+                     + (((p01 >>  8) & 0xFF) * itx + ((p11 >>  8) & 0xFF) * ftx) * fty + 32768) >> 16;
+        final int b = (((p00 & 0xFF)         * itx + (p10 & 0xFF)         * ftx) * ity
+                     + ((p01 & 0xFF)         * itx + (p11 & 0xFF)         * ftx) * fty + 32768) >> 16;
+
         return (a << 24) | (r << 16) | (g << 8) | b;
     }
-
-    private static int clamp(int v) { return v < 0 ? 0 : Math.min(v, 255); }
 }
