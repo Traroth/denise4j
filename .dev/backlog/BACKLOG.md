@@ -110,6 +110,13 @@ of each session.
 
 ---
 
+## Exemples (fr.dufrenoy.imagefx.examples)
+
+- [x] FleursDemoExample — zoom + rotation de fleurs.jpg en plein écran (session 2026-04-28)
+- [x] PaysageDemoExample — scrolling Lissajous multidirectionnel sur paysage_montagne.jpg (session 2026-04-28)
+
+---
+
 ## Deformation (a venir)
 
 - [ ] Design discussion (wave, distortion, tunnel, plasma...)

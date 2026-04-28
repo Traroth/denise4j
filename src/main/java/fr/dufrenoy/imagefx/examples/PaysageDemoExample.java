@@ -48,7 +48,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 /**
- * Fullscreen demo: {@code paysage_montage.jpg} with multidirectional
+ * Fullscreen demo: {@code paysage_montagne.jpg} with multidirectional
  * Lissajous scrolling.
  *
  * <p>The viewport follows a compound Lissajous curve (3:2 frequency ratio
@@ -85,14 +85,14 @@ public class PaysageDemoExample {
      * Launches the demo.
      *
      * @param args unused
-     * @throws IOException if {@code paysage_montage.jpg} cannot be loaded
+     * @throws IOException if {@code paysage_montagne.jpg} cannot be loaded
      */
     public static void main(String[] args) throws IOException {
         BufferedImage image;
         try (InputStream is = PaysageDemoExample.class.getClassLoader()
-                .getResourceAsStream("paysage_montage.jpg")) {
+                .getResourceAsStream("paysage_montagne.jpg")) {
             if (is == null) {
-                throw new IOException("paysage_montage.jpg not found in classpath resources");
+                throw new IOException("paysage_montagne.jpg not found in classpath resources");
             }
             image = ImageIO.read(is);
         }

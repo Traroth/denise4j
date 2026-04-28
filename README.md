@@ -74,6 +74,10 @@ ParamDouble          ← paramètre continu mutable (facteur de zoom, angle, ...
 
 EffectPipeline       ← chaîne d'effets — stateless, rendu dans un Stage
 Stage                ← buffer ARGB 32 bits — sortie vers le toolkit au choix
+
+StagePool            ← pool de N stages pour le double/triple buffering
+Orchestrator         ← boucle de rendu sur thread dédié, cadencée au targetFps
+FrameCallback        ← interface : callback appelé une fois par frame avant le rendu
 ```
 
 ### Principes
@@ -105,6 +109,18 @@ Pour chaque pixel `(x, y)` du Stage :
 | `WRAP` | Coordonnées ramenées modulo les dimensions (`Math.floorMod`) |
 | `CLIP` | `IndexOutOfBoundsException` — le pipeline ne franchit jamais les bornes |
 | `FEED` | Identique à `CLIP` à l'exécution — signale sémantiquement que les tuiles sont alimentées dynamiquement |
+
+---
+
+## Exemples
+
+Les exemples se trouvent dans `fr.dufrenoy.imagefx.examples`. Chacun est une
+application plein écran autonome (AWT, sans Swing). Appuyer sur `SPACE` pour quitter.
+
+| Classe | Effet | Image |
+|---|---|---|
+| `FleursDemoExample` | Rotation continue + zoom sinusoïdal (effet mandala) | `fleurs.jpg` |
+| `PaysageDemoExample` | Scrolling multidirectionnel sur courbe de Lissajous 3:2 | `paysage_montagne.jpg` |
 
 ---
 
@@ -145,7 +161,6 @@ mvn verify -P openjml-windows
 - [ ] Déformations (wave, distortion, tunnel, plasma)
 - [ ] Changement de palette (cycling, fading, remapping)
 - [ ] Compositing avancé (blending, masking, overlay)
-- [ ] Orchestrator (boucle de frames, double-buffering, timing)
 
 ---
 
