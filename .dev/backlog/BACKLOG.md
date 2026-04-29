@@ -38,6 +38,14 @@ of each session.
 - [x] Perf fix: getPixel via DataBufferInt direct array access (etait getRGB — session 2026-04-27)
 - [x] JML completeness: invariants DataBufferInt documentes (session 2026-04-27)
 
+## WrappingImageSource
+
+- [x] Design discussion (step 1) — source toroïdale pour scrolling parallaxe, remplace TileMap 1×1
+- [x] Stub class + JML specifications (step 2)
+- [x] BlackBoxTest (wrapping positif/négatif H et V, isUnbounded, conversion non-ARGB)
+- [x] Implementation (DataBufferInt direct, floorMod, isUnbounded=true)
+- [x] INVARIANTS.md mis à jour (session 2026-04-29)
+
 ## TileSet
 
 - [x] Design discussion (step 1)
@@ -128,6 +136,7 @@ of each session.
 - [x] White-box tests : bilinéaire précision à 0.5 et 2D midpoint, determinisme du rendu parallèle, dx/dy pré-sauvés dans RotateTransform.apply()
 - [x] EffectPipeline — `scrollH(ParamDouble)` / `scrollV(ParamDouble)` : scrolling sous-pixel (utile pour combos zoom+scroll) — ShadowDemo conserve ParamInt (chemin entier, 1 getPixel/pixel, bilinéaire superflu pour parallaxe pur)
 - [x] EffectPipeline — chemin 1D `linearH` / `linearV` : quand ty==0.0 (resp. tx==0.0), 2 getPixel au lieu de 4 (bilinéaire plein inutile quand une dimension est entière)
+
 
 ---
 

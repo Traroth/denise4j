@@ -26,8 +26,7 @@ import fr.dufrenoy.imagefx.orchestration.FrameDropPolicy;
 import fr.dufrenoy.imagefx.orchestration.Orchestrator;
 import fr.dufrenoy.imagefx.orchestration.StagePool;
 import fr.dufrenoy.imagefx.source.ImageSource;
-import fr.dufrenoy.imagefx.source.TileMap;
-import fr.dufrenoy.imagefx.source.TileSet;
+import fr.dufrenoy.imagefx.source.WrappingImageSource;
 import fr.dufrenoy.imagefx.staging.EffectPipeline;
 import fr.dufrenoy.imagefx.staging.ParamInt;
 import fr.dufrenoy.imagefx.staging.Stage;
@@ -66,11 +65,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   <li>Dark standing stones (55 %) — narrow near-black green menhirs</li>
  * </ol>
  *
- * <p>Scrolling layers use seamlessly tileable {@link TileMap}
- * ({@link TileMap.EdgePolicy#WRAP}). Display is driven by
- * {@link BufferStrategy} page flipping, which synchronises to the
- * monitor's vertical blank to eliminate tearing. Press {@code SPACE}
- * to quit. No Swing dependency.</p>
+ * <p>Scrolling layers use {@link WrappingImageSource}, which tiles the
+ * source image toroidally with direct array access (no TileMap overhead).
+ * Display is driven by {@link BufferStrategy} page flipping, which
+ * synchronises to the monitor's vertical blank to eliminate tearing.
+ * Press {@code SPACE} to quit. No Swing dependency.</p>
  */
 public class ShadowDemo {
 
@@ -114,15 +113,14 @@ public class ShadowDemo {
 
         // ─── Build layers ─────────────────────────────────────────────────────
 
-        ImageSource skySource = new ImageSource(buildSky(w, h));
-
-        TileSet hillsSet  = new TileSet(buildDistantHills(w, h),    w, h);
-        TileSet mountSet  = new TileSet(buildFarMountains(w, h),    w, h);
-        TileSet farSet    = new TileSet(buildFarRocks(w, h),        w, h);
-        TileSet midSet    = new TileSet(buildMidRocks(w, h),        w, h);
-        TileSet nearSet   = new TileSet(buildNearRocks(w, h),       w, h);
-        TileSet fgNearSet = new TileSet(buildNearForeground(w, h),  w, h);
-        TileSet slateSet  = new TileSet(buildForegroundStones(w, h),w, h);
+        ImageSource          skySource  = new ImageSource(buildSky(w, h));
+        WrappingImageSource  hillsSrc   = new WrappingImageSource(buildDistantHills(w, h));
+        WrappingImageSource  mountSrc   = new WrappingImageSource(buildFarMountains(w, h));
+        WrappingImageSource  farSrc     = new WrappingImageSource(buildFarRocks(w, h));
+        WrappingImageSource  midSrc     = new WrappingImageSource(buildMidRocks(w, h));
+        WrappingImageSource  nearSrc    = new WrappingImageSource(buildNearRocks(w, h));
+        WrappingImageSource  fgNearSrc  = new WrappingImageSource(buildNearForeground(w, h));
+        WrappingImageSource  slateSrc   = new WrappingImageSource(buildForegroundStones(w, h));
 
         // ─── Scroll parameters ────────────────────────────────────────────────
 
@@ -138,20 +136,13 @@ public class ShadowDemo {
 
         EffectPipeline pipeline = new EffectPipeline()
                 .addSource(skySource)
-                .addSource(tileMap1x1(hillsSet))
-                    .transparentColor(TRANSPARENT).scrollH(hillsScroll)
-                .addSource(tileMap1x1(mountSet))
-                    .transparentColor(TRANSPARENT).scrollH(mountScroll)
-                .addSource(tileMap1x1(farSet))
-                    .transparentColor(TRANSPARENT).scrollH(farScroll)
-                .addSource(tileMap1x1(midSet))
-                    .transparentColor(TRANSPARENT).scrollH(midScroll)
-                .addSource(tileMap1x1(nearSet))
-                    .transparentColor(TRANSPARENT).scrollH(nearScroll)
-                .addSource(tileMap1x1(fgNearSet))
-                    .transparentColor(TRANSPARENT).scrollH(fgNearScroll)
-                .addSource(tileMap1x1(slateSet))
-                    .transparentColor(TRANSPARENT).scrollH(slateScroll)
+                .addSource(hillsSrc) .transparentColor(TRANSPARENT).scrollH(hillsScroll)
+                .addSource(mountSrc) .transparentColor(TRANSPARENT).scrollH(mountScroll)
+                .addSource(farSrc)   .transparentColor(TRANSPARENT).scrollH(farScroll)
+                .addSource(midSrc)   .transparentColor(TRANSPARENT).scrollH(midScroll)
+                .addSource(nearSrc)  .transparentColor(TRANSPARENT).scrollH(nearScroll)
+                .addSource(fgNearSrc).transparentColor(TRANSPARENT).scrollH(fgNearScroll)
+                .addSource(slateSrc) .transparentColor(TRANSPARENT).scrollH(slateScroll)
                 .build();
 
         StagePool pool    = new StagePool(w, h, 3, FrameDropPolicy.REPEAT_LAST);
@@ -240,14 +231,6 @@ public class ShadowDemo {
         frame.addKeyListener(quitOnSpace);
         canvas.addKeyListener(quitOnSpace);
         canvas.requestFocus();
-    }
-
-    // ─── TileMap helper ──────────────────────────────────────────────────────────
-
-    private static TileMap tileMap1x1(TileSet tileSet) {
-        TileMap map = new TileMap(tileSet, 1, 1, TileMap.EdgePolicy.WRAP);
-        map.setTiles(0, 0, new int[][]{{0}});
-        return map;
     }
 
     // ─── Layer generation ────────────────────────────────────────────────────────

@@ -89,6 +89,17 @@ Whenever a new class is introduced:
 
 ---
 
+# `WrappingImageSource`
+
+    wrappingImageSource.getWidth()  > 0
+    wrappingImageSource.getHeight() > 0
+    wrappingImageSource.isUnbounded() == true
+    wrappingImageSource.pixels != null                       // DataBufferInt array, cached at construction
+    wrappingImageSource.pixels.length == getWidth() * getHeight()
+    // getPixel(x, y) == pixels[floorMod(y, h) * w + floorMod(x, w)]  for any (x, y) ∈ ℤ²
+
+---
+
 # `TileMap`
 
     tileMap.tileSet != null                                              // enforced by JML @invariant
