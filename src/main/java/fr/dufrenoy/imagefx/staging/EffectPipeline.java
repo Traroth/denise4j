@@ -102,6 +102,18 @@ public class EffectPipeline {
         public void apply(double[] c) { c[1] += offset.get(); }
     }
 
+    private static final class ScrollHDoubleTransform implements Transform {
+        final ParamDouble offset;
+        ScrollHDoubleTransform(ParamDouble offset) { this.offset = offset; }
+        public void apply(double[] c) { c[0] += offset.get(); }
+    }
+
+    private static final class ScrollVDoubleTransform implements Transform {
+        final ParamDouble offset;
+        ScrollVDoubleTransform(ParamDouble offset) { this.offset = offset; }
+        public void apply(double[] c) { c[1] += offset.get(); }
+    }
+
     private static final class ZoomTransform implements Transform {
         final ParamDouble factor;
         final ParamDouble cx, cy; // null = stage centre
@@ -317,6 +329,60 @@ public class EffectPipeline {
         requireHasSource();
         if (offset == null) throw new NullPointerException("offset must not be null");
         currentLayer.transforms.add(new ScrollVTransform(offset));
+        return this;
+    }
+
+    /**
+     * Adds a horizontal scrolling effect with sub-pixel precision to the
+     * current layer.
+     *
+     * <p>Stage pixel {@code (x, y)} reads from source pixel
+     * {@code (x + offset.get(), y)}. The fractional part of the offset
+     * is resolved by bilinear interpolation, enabling smooth motion for
+     * slow-moving layers without integer quantisation artefacts.</p>
+     *
+     * @param offset the horizontal offset parameter (in pixels, may be fractional)
+     * @return this pipeline, for chaining
+     * @throws NullPointerException  if {@code offset} is {@code null}
+     * @throws IllegalStateException if no source has been opened yet,
+     *         or if the pipeline has already been built
+     */
+    //@ requires offset != null;
+    //@ requires !isBuilt();
+    //@ requires hasAtLeastOneSource();
+    //@ ensures \result == this;
+    public EffectPipeline scrollH(ParamDouble offset) {
+        requireNotBuilt();
+        requireHasSource();
+        if (offset == null) throw new NullPointerException("offset must not be null");
+        currentLayer.transforms.add(new ScrollHDoubleTransform(offset));
+        return this;
+    }
+
+    /**
+     * Adds a vertical scrolling effect with sub-pixel precision to the
+     * current layer.
+     *
+     * <p>Stage pixel {@code (x, y)} reads from source pixel
+     * {@code (x, y + offset.get())}. The fractional part of the offset
+     * is resolved by bilinear interpolation, enabling smooth motion for
+     * slow-moving layers without integer quantisation artefacts.</p>
+     *
+     * @param offset the vertical offset parameter (in pixels, may be fractional)
+     * @return this pipeline, for chaining
+     * @throws NullPointerException  if {@code offset} is {@code null}
+     * @throws IllegalStateException if no source has been opened yet,
+     *         or if the pipeline has already been built
+     */
+    //@ requires offset != null;
+    //@ requires !isBuilt();
+    //@ requires hasAtLeastOneSource();
+    //@ ensures \result == this;
+    public EffectPipeline scrollV(ParamDouble offset) {
+        requireNotBuilt();
+        requireHasSource();
+        if (offset == null) throw new NullPointerException("offset must not be null");
+        currentLayer.transforms.add(new ScrollVDoubleTransform(offset));
         return this;
     }
 
@@ -541,6 +607,12 @@ public class EffectPipeline {
                     final int pixel;
                     if (tx == 0.0 && ty == 0.0) {
                         pixel = src.getPixel(x0, y0);
+                    } else if (ty == 0.0) {
+                        final int x1 = unbounded ? x0 + 1 : Math.min(x0 + 1, srcW - 1);
+                        pixel = linearH(src.getPixel(x0, y0), src.getPixel(x1, y0), tx);
+                    } else if (tx == 0.0) {
+                        final int y1 = unbounded ? y0 + 1 : Math.min(y0 + 1, srcH - 1);
+                        pixel = linearV(src.getPixel(x0, y0), src.getPixel(x0, y1), ty);
                     } else {
                         final int x1 = unbounded ? x0 + 1 : Math.min(x0 + 1, srcW - 1);
                         final int y1 = unbounded ? y0 + 1 : Math.min(y0 + 1, srcH - 1);
@@ -560,7 +632,37 @@ public class EffectPipeline {
     // ─── Bilinear sampling helpers ───────────────────────────────────────────────
 
     /**
-     * Bilinear interpolation using 8-bit fixed-point weights.
+     * 1-D horizontal linear interpolation, 8-bit fixed-point.
+     * Used when ty == 0.0 exactly (pure H-scroll or horizontal-only fractional position).
+     * 2 source samples vs 4 for bilinear: (c0·itx + c1·ftx + 128) >> 8.
+     */
+    private static int linearH(int p0, int p1, double tx) {
+        final int ftx = (int)(tx * 256);
+        final int itx = 256 - ftx;
+        final int a = ( (p0 >>> 24)        * itx + (p1 >>> 24)        * ftx + 128) >> 8;
+        final int r = (((p0 >> 16) & 0xFF) * itx + ((p1 >> 16) & 0xFF) * ftx + 128) >> 8;
+        final int g = (((p0 >>  8) & 0xFF) * itx + ((p1 >>  8) & 0xFF) * ftx + 128) >> 8;
+        final int b = ( (p0        & 0xFF) * itx + (p1        & 0xFF)  * ftx + 128) >> 8;
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    /**
+     * 1-D vertical linear interpolation, 8-bit fixed-point.
+     * Used when tx == 0.0 exactly (pure V-scroll or vertical-only fractional position).
+     * 2 source samples vs 4 for bilinear: (c0·ity + c1·fty + 128) >> 8.
+     */
+    private static int linearV(int p0, int p1, double ty) {
+        final int fty = (int)(ty * 256);
+        final int ity = 256 - fty;
+        final int a = ( (p0 >>> 24)        * ity + (p1 >>> 24)        * fty + 128) >> 8;
+        final int r = (((p0 >> 16) & 0xFF) * ity + ((p1 >> 16) & 0xFF) * fty + 128) >> 8;
+        final int g = (((p0 >>  8) & 0xFF) * ity + ((p1 >>  8) & 0xFF) * fty + 128) >> 8;
+        final int b = ( (p0        & 0xFF) * ity + (p1        & 0xFF)  * fty + 128) >> 8;
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    /**
+     * Full 2-D bilinear interpolation using 8-bit fixed-point weights.
      * Weights ftx, fty ∈ [0,255], itx = 256−ftx, ity = 256−fty.
      * Result per channel: (c00·itx·ity + c10·ftx·ity + c01·itx·fty + c11·ftx·fty + 32768) >> 16.
      * Intermediate values fit in int (max ~33M < 2³¹). No clamping required.

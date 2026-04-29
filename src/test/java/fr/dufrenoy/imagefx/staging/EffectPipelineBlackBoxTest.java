@@ -472,7 +472,7 @@ class EffectPipelineBlackBoxTest {
     @Test
     void scrollHWithNullOffsetThrows() {
         assertThrows(NullPointerException.class,
-                () -> new EffectPipeline().addSource(solid(1, 1, RED)).scrollH(null));
+                () -> new EffectPipeline().addSource(solid(1, 1, RED)).scrollH((ParamInt) null));
     }
 
     @Test
@@ -498,7 +498,7 @@ class EffectPipelineBlackBoxTest {
     @Test
     void scrollVWithNullOffsetThrows() {
         assertThrows(NullPointerException.class,
-                () -> new EffectPipeline().addSource(solid(1, 1, RED)).scrollV(null));
+                () -> new EffectPipeline().addSource(solid(1, 1, RED)).scrollV((ParamInt) null));
     }
 
     @Test

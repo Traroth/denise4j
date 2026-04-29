@@ -45,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  *   <li>Fixed-point bilinear precision at 0.5 and 2-D midpoints.</li>
  *   <li>Parallel rendering determinism (parallel stream per y-row).</li>
  *   <li>{@code RotateTransform.apply()} saves dx/dy before updating coords.</li>
+ *   <li>Sub-pixel {@code scrollH}/{@code scrollV} ({@link ParamDouble} overloads).</li>
  * </ul>
  */
 class EffectPipelineWhiteBoxTest {
@@ -304,5 +305,77 @@ class EffectPipelineWhiteBoxTest {
         assertEquals(GREEN, px(stage, 2, 1));
         // stage(1,2): dx=0, dy=1 → srcX=2, srcY=1 → GREEN
         assertEquals(GREEN, px(stage, 1, 2));
+    }
+
+    // ─── Sub-pixel scrollH / scrollV (ParamDouble overloads) ─────────────────────
+
+    @Test
+    void scrollHDoubleAtHalfPixelProducesLinearMix() {
+        // Source 2×1 [RED, BLUE]. scrollH(ParamDouble(0.5)).
+        // ty == 0.0 exactly → linearH path (not full bilinear).
+        // stage(0): srcX=0.5 → linearH(RED, BLUE, 0.5) ≠ RED, ≠ BLUE.
+        // stage(1): srcX=1.5 → linearH(BLUE, BLUE, 0.5) = BLUE (edge clamped).
+        Stage stage = new Stage(2, 1, BLACK);
+        new EffectPipeline()
+                .addSource(grid(new int[][] {{ RED, BLUE }}))
+                .scrollH(new ParamDouble(0.5))
+                .build()
+                .render(stage);
+        assertNotEquals(RED,  px(stage, 0, 0));
+        assertNotEquals(BLUE, px(stage, 0, 0));
+        assertEquals(BLUE, px(stage, 1, 0));
+    }
+
+    @Test
+    void scrollHDoubleAtExactHalfGivesMidpointChannel() {
+        // Source 2×1 [RED=0xFFFF0000, BLUE=0xFF0000FF]. scrollH(0.5).
+        // linearH path: ftx=128, itx=128.
+        // r: (255*128 + 0*128 + 128) >> 8 = 128 = 0x80. b: same. → 0xFF800080.
+        Stage stage = new Stage(2, 1, BLACK);
+        new EffectPipeline()
+                .addSource(grid(new int[][] {{ RED, BLUE }}))
+                .scrollH(new ParamDouble(0.5))
+                .build()
+                .render(stage);
+        assertEquals(0xFF800080, px(stage, 0, 0));
+    }
+
+    @Test
+    void scrollVDoubleAtHalfPixelProducesLinearMix() {
+        // Source 1×2 [RED top, BLUE bottom]. scrollV(0.5).
+        // tx == 0.0 exactly → linearV path.
+        // stage(0,0): srcY=0.5 → linearV(RED, BLUE, 0.5) ≠ RED, ≠ BLUE.
+        BufferedImage img = new BufferedImage(1, 2, BufferedImage.TYPE_INT_ARGB);
+        img.setRGB(0, 0, RED); img.setRGB(0, 1, BLUE);
+        Stage stage = new Stage(1, 2, BLACK);
+        new EffectPipeline()
+                .addSource(new ImageSource(img))
+                .scrollV(new ParamDouble(0.5))
+                .build()
+                .render(stage);
+        assertNotEquals(RED,  px(stage, 0, 0));
+        assertNotEquals(BLUE, px(stage, 0, 0));
+    }
+
+    @Test
+    void scrollHDoubleIntegerOffsetMatchesScrollHInt() {
+        // Integer-valued ParamDouble offset must give the same result as ParamInt.
+        // stage(0): srcX=1 → BLUE exactly (integer path, no bilinear).
+        Stage stageDouble = new Stage(2, 1, BLACK);
+        new EffectPipeline()
+                .addSource(grid(new int[][] {{ RED, BLUE }}))
+                .scrollH(new ParamDouble(1.0))
+                .build()
+                .render(stageDouble);
+
+        Stage stageInt = new Stage(2, 1, BLACK);
+        new EffectPipeline()
+                .addSource(grid(new int[][] {{ RED, BLUE }}))
+                .scrollH(new ParamInt(1))
+                .build()
+                .render(stageInt);
+
+        assertEquals(px(stageInt, 0, 0), px(stageDouble, 0, 0));
+        assertEquals(px(stageInt, 1, 0), px(stageDouble, 1, 0));
     }
 }

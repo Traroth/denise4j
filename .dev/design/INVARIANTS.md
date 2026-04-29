@@ -135,17 +135,15 @@ The following invariants apply to any `Transform` at render time:
 
 ## Effect — `scrollH`
 
-    // offset: any integer value — negative, zero, positive
-    // srcX = x + offset.get()
-    // srcY = y (unchanged)
-    // Result is always integer-valued — bilinear shortcut triggers (tx == 0.0 && ty == 0.0)
+    // scrollH(ParamInt):  offset ∈ ℤ — srcX = x + offset.get()  (always integer, bilinear shortcut)
+    // scrollH(ParamDouble): offset ∈ ℝ — srcX = x + offset.get() (fractional → bilinear interpolation)
+    // srcY unchanged in both variants
 
 ## Effect — `scrollV`
 
-    // offset: any integer value
-    // srcX = x (unchanged)
-    // srcY = y + offset.get()
-    // Result is always integer-valued — bilinear shortcut triggers
+    // scrollV(ParamInt):  offset ∈ ℤ — srcY = y + offset.get()  (always integer, bilinear shortcut)
+    // scrollV(ParamDouble): offset ∈ ℝ — srcY = y + offset.get() (fractional → bilinear interpolation)
+    // srcX unchanged in both variants
 
 ## Effect — `zoom`
 

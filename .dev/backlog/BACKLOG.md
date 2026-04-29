@@ -126,6 +126,8 @@ of each session.
 - [x] EffectPipeline — `Layer.transformsArr` (Transform[]) figé à build() — évite l'overhead ArrayList iterator en hot loop
 - [x] Orchestrator — drift correction : cible temporelle absolue (`targetTime += frameNanos`) au lieu de `frameNanos - elapsed` — compense les overruns sans dériver sur la durée
 - [x] White-box tests : bilinéaire précision à 0.5 et 2D midpoint, determinisme du rendu parallèle, dx/dy pré-sauvés dans RotateTransform.apply()
+- [x] EffectPipeline — `scrollH(ParamDouble)` / `scrollV(ParamDouble)` : scrolling sous-pixel (utile pour combos zoom+scroll) — ShadowDemo conserve ParamInt (chemin entier, 1 getPixel/pixel, bilinéaire superflu pour parallaxe pur)
+- [x] EffectPipeline — chemin 1D `linearH` / `linearV` : quand ty==0.0 (resp. tx==0.0), 2 getPixel au lieu de 4 (bilinéaire plein inutile quand une dimension est entière)
 
 ---
 
